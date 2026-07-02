@@ -48,7 +48,7 @@ module.exports = async (req, res) => {
 
       // If database is completely uninitialized, set an initial target time (10s from now)
       if (targetActiveTime === 0) {
-        targetActiveTime = now + 10000;
+        targetActiveTime = now + 5 * 60 * 1000; // 5 minutes
         await redis.set(KEY_TARGET_ACTIVE_TIME, targetActiveTime);
       }
 
@@ -132,7 +132,9 @@ module.exports = async (req, res) => {
       };
 
       const newGloryEndTime = now + 10000; // 10s of glory
-      const newTargetActiveTime = newGloryEndTime + (Math.floor(Math.random() * (30 - 10 + 1)) + 10) * 1000; // 10-30s cooldown for testing
+      const cooldownMin = 20 * 60 * 1000; // 20 minutes in ms
+      const cooldownMax = 30 * 60 * 1000; // 30 minutes in ms
+      const newTargetActiveTime = newGloryEndTime + cooldownMin + Math.floor(Math.random() * (cooldownMax - cooldownMin)); // 20-30 min cooldown
 
       const result = await redis.eval(
         claimScript,
