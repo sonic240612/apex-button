@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { socket } from '@/lib/socket';
 import { motion, AnimatePresence } from 'framer-motion';
 
 type GameState = 'cooldown' | 'active' | 'decision';
@@ -13,6 +12,8 @@ interface Winner {
   timestamp: string;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+
 export default function Home() {
   const [profile, setProfile] = useState<{ name: string; country: string } | null>(null);
   const [form, setForm] = useState({ name: '', country: '' });
@@ -22,77 +23,44 @@ export default function Home() {
   const [history, setHistory] = useState<Winner[]>([]);
   const [error, setError] = useState('');
 
-  // 1. 소켓 로직 및 로컬 스토리지 프로필 불러오기 (안정적인 순서로 재배치)
+  // 1. 페이지 로드 시 로컬 스토리지 프로필 즉시 로드 (깜빡임 방지)
   useEffect(() => {
-    // [우선 작업] 로컬 스토리지에서 프로필을 즉시 불러와 상태를 세팅 (깜빡임 방지)
     const saved = localStorage.getItem('apex_profile');
-    let parsedProfile: { name: string; country: string } | null = null;
-    
     if (saved) {
       try {
-        parsedProfile = JSON.parse(saved);
-        setProfile(parsedProfile);
-        console.log('Loaded profile instantly:', parsedProfile);
+        const parsed = JSON.parse(saved);
+        setProfile(parsed);
+        console.log('Loaded profile instantly:', parsed);
       } catch (e) {
-        console.error("Failed to parse profile from localStorage", e);
+        console.error("Failed to parse profile", e);
       }
     }
+  }, []);
 
-    // [이벤트 리스너 등록] 소켓 연결 전에 리스너들을 먼저 등록합니다.
-    socket.on('connect', () => {
-      console.log('Socket connected successfully');
-      // 소켓 연결이 성공하면, 로컬에서 로드해둔 프로필 정보를 서버로 전송
-      if (parsedProfile) {
-        socket.emit('join', parsedProfile);
+  // 2. 서버리스 폴링 (State Polling) - 1초마다 최신 상태 가져오기
+  useEffect(() => {
+    const fetchState = async () => {
+      try {
+        const res = await fetch(`${API_URL}/state`);
+        if (!res.ok) throw new Error('Failed to fetch state');
+        const data = await res.json();
+        
+        setState(data.state as GameState);
+        setTimer(data.timer);
+        setWinner(data.winner);
+        setHistory(data.history);
+      } catch (err) {
+        console.error('Error fetching state:', err);
       }
-    });
-
-    socket.on('init_data', ({ state, timer, winners, currentWinner }) => {
-      setState(state as GameState);
-      setTimer(parseInt(timer));
-      setHistory(winners);
-      setWinner(currentWinner);
-    });
-
-    socket.on('tick', ({ state, timer }) => {
-      setState(state as GameState);
-      setTimer(parseInt(timer));
-    });
-
-    socket.on('state_change', ({ state, timer }) => {
-      setState(state as GameState);
-      if (timer) setTimer(timer);
-    });
-
-    socket.on('winner_decided', ({ winner }) => {
-      setWinner(winner);
-      setHistory(prev => [winner, ...prev].slice(0, 10));
-      setState('decision');
-    });
-
-    socket.on('click_failed', (msg) => {
-      setError(msg);
-      setTimeout(() => setError(''), 2000);
-    });
-
-    socket.on('error', (msg) => {
-      setError(msg);
-      setTimeout(() => setError(''), 2000);
-    });
-
-    // [소켓 연결 시작] 리스너 등록이 모두 끝난 후 연결을 시작합니다.
-    socket.connect();
-
-    return () => {
-      socket.off('connect');
-      socket.off('init_data');
-      socket.off('tick');
-      socket.off('state_change');
-      socket.off('winner_decided');
-      socket.off('click_failed');
-      socket.off('error');
-      socket.disconnect();
     };
+
+    // 최초 로드
+    fetchState();
+
+    // 1초마다 갱신
+    const interval = setInterval(fetchState, 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const formatDate = (dateString: string) => {
@@ -110,18 +78,41 @@ export default function Home() {
     });
   };
 
-  // 2. 프로필 저장 로직
+  // 3. 프로필 저장 (로컬 스토리지 저장 병합)
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.country) return;
     
     setProfile(form);
-    localStorage.setItem('apex_profile', JSON.stringify(form)); // 저장
-    socket.emit('join', form);
+    localStorage.setItem('apex_profile', JSON.stringify(form)); // 브라우저 로컬 저장
   };
 
-  const handleClick = () => {
-    socket.emit('click');
+  // 4. 클릭 요청 (POST 전송)
+  const handleClick = async () => {
+    if (!profile) return;
+
+    try {
+      const res = await fetch(`${API_URL}/click`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(profile),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Too slow!');
+        setTimeout(() => setError(''), 2000);
+      } else {
+        setWinner(data.winner);
+        setState('decision');
+      }
+    } catch (err) {
+      setError('Network error!');
+      setTimeout(() => setError(''), 2000);
+    }
   };
 
   return (
@@ -273,7 +264,7 @@ export default function Home() {
         <button 
           onClick={() => {
             setProfile(null);
-            localStorage.removeItem('apex_profile'); // 삭제
+            localStorage.removeItem('apex_profile'); // 로컬 스토리지 정보 삭제
           }}
           className="mt-6 w-full py-3 text-xs font-bold text-zinc-500 hover:text-white bg-zinc-800/50 rounded-xl transition-all hover:bg-zinc-700"
         >
