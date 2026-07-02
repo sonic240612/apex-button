@@ -22,8 +22,21 @@ export default function Home() {
   const [history, setHistory] = useState<Winner[]>([]);
   const [error, setError] = useState('');
 
+  // 1. 소켓 로직 및 로컬 스토리지 프로필 불러오기
   useEffect(() => {
     socket.connect();
+
+    // 로컬 스토리지에서 프로필 불러오기
+    const saved = localStorage.getItem('apex_profile');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setProfile(parsed);
+        socket.emit('join', parsed);
+      } catch (e) {
+        console.error("Failed to parse profile", e);
+      }
+    }
 
     socket.on('init_data', ({ state, timer, winners, currentWinner }) => {
       setState(state as GameState);
@@ -84,11 +97,13 @@ export default function Home() {
     });
   };
 
+  // 2. 프로필 저장 로직
   const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.country) return;
     
     setProfile(form);
+    localStorage.setItem('apex_profile', JSON.stringify(form)); // 저장
     socket.emit('join', form);
   };
 
@@ -243,7 +258,10 @@ export default function Home() {
         </div>
 
         <button 
-          onClick={() => setProfile(null)}
+          onClick={() => {
+            setProfile(null);
+            localStorage.removeItem('apex_profile'); // 삭제
+          }}
           className="mt-6 w-full py-3 text-xs font-bold text-zinc-500 hover:text-white bg-zinc-800/50 rounded-xl transition-all hover:bg-zinc-700"
         >
           EDIT PROFILE
