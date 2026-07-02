@@ -116,7 +116,7 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen relative overflow-hidden bg-zinc-950 text-white font-sans">
+    <main className="flex h-screen relative overflow-hidden bg-zinc-950 text-white font-sans">
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-800/20 via-zinc-950 to-zinc-950 pointer-events-none" />
 
       {!profile && (
