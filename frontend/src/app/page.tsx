@@ -26,17 +26,21 @@ export default function Home() {
   useEffect(() => {
     socket.connect();
 
-    // 로컬 스토리지에서 프로필 불러오기
-    const saved = localStorage.getItem('apex_profile');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setProfile(parsed);
-        socket.emit('join', parsed);
-      } catch (e) {
-        console.error("Failed to parse profile", e);
+    socket.on('connect', () => {
+      console.log('Socket connected');
+      // 로컬 스토리지에서 프로필 불러오기
+      const saved = localStorage.getItem('apex_profile');
+      console.log('Saved profile from localStorage:', saved);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setProfile(parsed);
+          socket.emit('join', parsed);
+        } catch (e) {
+          console.error("Failed to parse profile", e);
+        }
       }
-    }
+    });
 
     socket.on('init_data', ({ state, timer, winners, currentWinner }) => {
       setState(state as GameState);
