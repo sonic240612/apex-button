@@ -1,7 +1,7 @@
 const Redis = require('ioredis');
 
 // Initialize Redis
-const redisUrl = process.env.REDIS_URL || process.env.KV_URL || 'redis://localhost:6379';
+const redisUrl = process.env.REDIS_URL || process.env.KV_URL || process.env.UPSTASH_REDIS_URL || 'redis://localhost:6379';
 const redis = new Redis(redisUrl);
 
 // Redis Keys
